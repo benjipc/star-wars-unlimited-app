@@ -11,7 +11,8 @@ CONFIG = {
     "data": {
         "image_folder": "images",
         "cards_file": "cards.json",
-        "collection_file": "collection.json"
+        "collection_file": "collection.json",
+        "deck_folder": "decks"
     },
     "api": {
         "base_url": "https://api.swu-db.com",

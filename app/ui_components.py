@@ -15,7 +15,7 @@ class UIComponents:
         self.root = app.root
         self.cards = app.cards
         self.collection = app.collection
-        self.deck_builder_ui = DeckBuilderTab(app)
+        
 
         self.setup_menu()
         self.setup_tabs()
@@ -42,6 +42,12 @@ class UIComponents:
         self.notebook.add(self.owned_frame, text="Owned Cards")
         self.setup_search_frame(self.owned_frame, owned=True)
         self.setup_table(self.owned_frame, is_owned=True)
+
+        # Deck Builder Tab
+        self.deck_builder_frame = tk.Frame(self.notebook)
+        self.notebook.add(self.deck_builder_frame, text="Deck Builder")
+        self.deck_builder_tab = DeckBuilderTab(self.deck_builder_frame, self.app)
+        self.deck_builder_tab.frame.pack(fill="both", expand=True)
 
     def setup_search_frame(self, parent, owned=False):
         var_prefix = "owned_" if owned else ""
