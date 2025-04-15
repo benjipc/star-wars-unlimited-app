@@ -6,6 +6,7 @@ from app.config import CONFIG
 from app.validators import CardValidator
 from app.data_manager import save_collection
 from app.card_detail_window import CardDetailWindow
+from app.deck_builder_ui import DeckBuilderTab
 
 
 class UIComponents:
@@ -14,6 +15,7 @@ class UIComponents:
         self.root = app.root
         self.cards = app.cards
         self.collection = app.collection
+        self.deck_builder_ui = DeckBuilderTab(app)
 
         self.setup_menu()
         self.setup_tabs()

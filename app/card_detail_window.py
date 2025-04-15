@@ -104,6 +104,23 @@ class CardDetailWindow:
     def add_card_info(self, parent):
         tk.Label(parent, text=self.card.get("name", "Unknown Card"), font=("Arial", 14, "bold")).pack(pady=5)
 
+        owned_qty = tk.IntVar(value=self.card_app.collection.get(self.card["card_key"], 0))
+
+        def update_owned(new_qty):
+            owned_qty.set(new_qty)
+            self.card_app.collection[self.card["card_key"]] = new_qty
+            self.card_app.save_collection()
+            self.card_app.ui.load_table()
+            self.card_app.ui.load_table(owned_only=True)
+
+        owned_frame = tk.Frame(parent)
+        owned_frame.pack(pady=5)
+
+        tk.Label(owned_frame, text="Owned:").pack(side="left", padx=5)
+        tk.Button(owned_frame, text="-", command=lambda: update_owned(max(0, owned_qty.get() - 1))).pack(side="left")
+        tk.Label(owned_frame, textvariable=owned_qty).pack(side="left", padx=5)
+        tk.Button(owned_frame, text="+", command=lambda: update_owned(owned_qty.get() + 1)).pack(side="left")
+
         # Card Stats
         stats_text = (
             f"Type: {self.card.get('type', '')}\n"

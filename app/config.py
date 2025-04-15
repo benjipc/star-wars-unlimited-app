@@ -23,6 +23,6 @@ CONFIG = {
     },
     "default_sets": ['sor', 'shd', 'twi', 'jtl'],
     "search": {
-        "fuzzy_threshold": 70
+        "fuzzy_threshold": 80
     }
 }
