@@ -1,6 +1,8 @@
+from typing import *
+
 class CardValidator:
     @staticmethod
-    def validate_set_codes(set_codes):
+    def validate_set_codes(set_codes:str): #type hint
         if not set_codes:
             return False, "No set codes provided"
         
@@ -15,7 +17,7 @@ class CardValidator:
         return True, set_codes
 
     @staticmethod
-    def validate_owned_quantity(quantity):
+    def validate_owned_quantity(quantity:int):
         try:
             qty = int(quantity)
             if qty < 0:
@@ -27,7 +29,7 @@ class CardValidator:
             return False, "Please enter a valid number"
 
     @staticmethod
-    def validate_card_data(card):
+    def validate_card_data(card:Dict) -> Tuple[bool, Optional[str]]:
         required_fields = ["Name", "Set", "Number"]
         for field in required_fields:
             if not card.get(field):

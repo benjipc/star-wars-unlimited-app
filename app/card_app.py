@@ -1,3 +1,4 @@
+from typing import *
 import tkinter as tk
 from tkinter import ttk
 from tkinter import messagebox
@@ -59,7 +60,7 @@ class CardApp:
         CardDetailWindow(self.root, self, card)
 
     def update_card_data(self):
-        sets = self.get_set_codes_dialog(self.default_sets)
+        sets:str = self.get_set_codes_dialog(self.default_sets)
 
         valid, message = CardValidator.validate_set_codes(sets)
         if not valid:
@@ -108,7 +109,7 @@ class CardApp:
                             raise ConnectionError(f"Failed to fetch data for {set_code}: {e}")
 
                 if "data" in response_data:
-                    set_cards = response_data["data"]
+                    set_cards:List[Dict[str:Any]] = response_data["data"]
                     normalized_cards = []
                     for card in set_cards:
                         valid, error_message = CardValidator.validate_card_data(card)

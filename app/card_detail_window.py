@@ -7,7 +7,6 @@ import json
 from io import BytesIO
 from app.config import CONFIG
 
-
 class CardDetailWindow:
     def __init__(self, parent, card_app, card):
         self.parent = parent
@@ -16,8 +15,8 @@ class CardDetailWindow:
         self.is_front_image = True
         self.image_path = ""
         self.image_folder = "images"
-        #poopoopeepee
-        os.makedirs(self.image_folder, exist_ok=True)
+        
+        os.makedirs(self.image_folder, exist_ok=True) #TODO: move to app/data_manager.py
 
         self.detail_window = tk.Toplevel(self.parent)
         self.detail_window.title(f"Card Info - {card.get('name', '')}")
