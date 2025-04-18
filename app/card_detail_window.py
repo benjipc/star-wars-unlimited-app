@@ -16,7 +16,7 @@ class CardDetailWindow:
         self.is_front_image = True
         self.image_path = ""
         self.image_folder = "images"
-
+        #poopoopeepee
         os.makedirs(self.image_folder, exist_ok=True)
 
         self.detail_window = tk.Toplevel(self.parent)
