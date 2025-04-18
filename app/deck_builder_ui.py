@@ -2,6 +2,7 @@ import os
 import json
 import tkinter as tk
 from tkinter import ttk, simpledialog, messagebox
+from rapidfuzz import fuzz
 
 from app.config import CONFIG
 
@@ -23,6 +24,7 @@ class DeckBuilderTab:
         self.from_inventory_var = tk.BooleanVar(value=True)
         self.search_menu = tk.Menu(self.root, tearoff=0)
         self.search_popup = None
+        self.dropdown_active_index = 0  # Track the active index for hover preview
 
         self.setup_layout()
         self.load_deck_tree()
@@ -53,7 +55,7 @@ class DeckBuilderTab:
         self.deck_tree.bind("<Double-1>", self.on_deck_select)
         self.deck_tree.bind("<Return>", self.on_deck_select)
         self.deck_tree.bind("<Delete>", self.delete_deck)
-        
+
         # Right-click Menus
         self.deck_menu = tk.Menu(self.root, tearoff=0)
         self.deck_menu.add_command(label="Rename Deck", command=self.rename_deck)
@@ -96,7 +98,7 @@ class DeckBuilderTab:
         status_combo.pack(side="left", padx=5)
 
         tk.Label(status_frame, textvariable=self.value_var).pack(side="left", padx=10)
-        
+
         # Middle Row
         middle_frame = tk.Frame(self.info_frame)
         middle_frame.pack(fill="x", pady=5)
@@ -125,15 +127,14 @@ class DeckBuilderTab:
         self.search_entry.pack(side="left", padx=2)
         self.search_entry.bind("<KeyRelease>", self.update_search_dropdown)
 
-
         tk.Checkbutton(search_frame, text="From Inventory Only", variable=self.from_inventory_var, command=self.update_search_dropdown).pack(side="left", padx=10)
 
-
-       # Card Table
+        # Card Table
         self.table_frame = tk.Frame(self.right_frame)
         self.table_frame.pack(fill="both", expand=True)
 
-        self.card_tree = ttk.Treeview(self.table_frame, columns=("CardKey", "Owned", "In Deck", "Name", "Set", "Type", "Arenas", "Aspect"), show="headings")        
+        self.visible_columns = ["CardKey", "Owned", "In Deck", "Name", "Set", "Type", "Arenas", "Aspect"]
+        self.card_tree = ttk.Treeview(self.table_frame, columns=self.visible_columns, show="headings")
         for col in self.card_tree["columns"]:
             self.card_tree.heading(col, text=col)
             self.card_tree.column(col, width=100, stretch=True)
@@ -142,7 +143,81 @@ class DeckBuilderTab:
 
         self.card_tree.bind("<Double-1>", self.on_card_table_double_click)
 
+        # Right-click header menu
+        self.card_tree.bind("<Button-3>", self._on_column_right_click)
+        self.header_menu = tk.Menu(self.root, tearoff=0)
+        self.header_menu.add_command(label="Configure Columns...", command=self._open_column_config)
 
+    def _on_column_right_click(self, event):
+        region = self.card_tree.identify_region(event.x, event.y)
+        if region == "heading":
+            self.header_menu.tk_popup(event.x_root, event.y_root)
+
+    def _open_column_config(self):
+        # Discover all possible columns
+        all_columns = set()
+        for card in self.app.cards:
+            all_columns.update(card.keys())
+        all_columns.update(["CardKey", "Owned", "In Deck"])
+        all_columns = sorted(all_columns)
+
+        config_win = tk.Toplevel(self.root)
+        config_win.title("Configure Visible Columns")
+        config_win.geometry("400x500")
+
+        tk.Label(config_win, text="Toggle columns to display:", font=("Arial", 12)).pack(pady=(10, 0))
+
+        # Scrollable checkbox area
+        canvas = tk.Canvas(config_win)
+        scrollbar = ttk.Scrollbar(config_win, orient="vertical", command=canvas.yview)
+        scroll_frame = tk.Frame(canvas)
+
+        scroll_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.create_window((0, 0), window=scroll_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        # Two-column layout
+        check_vars = {}
+        col_frame_left = tk.Frame(scroll_frame)
+        col_frame_right = tk.Frame(scroll_frame)
+        col_frame_left.pack(side="left", fill="both", expand=True, padx=(10, 5))
+        col_frame_right.pack(side="left", fill="both", expand=True, padx=(5, 10))
+
+        half = (len(all_columns) + 1) // 2
+        for i, col in enumerate(all_columns):
+            var = tk.BooleanVar(value=col in self.visible_columns)
+            cb = tk.Checkbutton(
+                col_frame_left if i < half else col_frame_right,
+                text=col,
+                variable=var,
+                anchor="w"
+            )
+            cb.pack(fill="x", anchor="w")
+            check_vars[col] = var
+
+        def apply_and_close():
+            self.visible_columns = [col for col, var in check_vars.items() if var.get()]
+            self.card_tree["columns"] = self.visible_columns
+            self.card_tree["displaycolumns"] = self.visible_columns
+
+            for col in self.visible_columns:
+                self.card_tree.heading(col, text=col)
+                self.card_tree.column(col, width=100, stretch=True)
+
+            self.load_deck_table()
+            config_win.destroy()
+
+        def cancel_and_close():
+            config_win.destroy()
+
+        button_frame = tk.Frame(config_win)
+        button_frame.pack(pady=10)
+
+        tk.Button(button_frame, text="OK", command=apply_and_close).pack(side="left", padx=5)
+        tk.Button(button_frame, text="Cancel", command=cancel_and_close).pack(side="left", padx=5)
 
     def load_deck_tree(self):
         self.deck_tree.delete(*self.deck_tree.get_children())
@@ -362,27 +437,27 @@ class DeckBuilderTab:
         self.value_var.set("Estimated Value: $TODO")
 
         # Find all leaders and bases in the deck
-        leaders = [k for k in self.deck_data.get("cards", {}) if next((c for c in self.app.cards if c["card_key"] == k and c["type"] == "Leader"), None)]
-        bases = [k for k in self.deck_data.get("cards", {}) if next((c for c in self.app.cards if c["card_key"] == k and c["type"] == "Base"), None)]
+        leaders = [k for k in self.deck_data.get("cards", {}) if next((c for c in self.app.cards if c["card_key"] == k and c["Type"] == "Leader"), None)]
+        bases = [k for k in self.deck_data.get("cards", {}) if next((c for c in self.app.cards if c["card_key"] == k and c["Type"] == "Base"), None)]
 
         # Build Leader display
         if not leaders:
             leader_display = "Leader: None"
         elif len(leaders) == 1:
-            leader_name = next(c["name"] for c in self.app.cards if c["card_key"] == leaders[0])
+            leader_name = next(c["Name"] for c in self.app.cards if c["card_key"] == leaders[0])
             leader_display = f"Leader: {leader_name}"
         else:
-            names = [next(c["name"] for c in self.app.cards if c["card_key"] == k) for k in leaders]
+            names = [next(c["Name"] for c in self.app.cards if c["card_key"] == k) for k in leaders]
             leader_display = f"Leader: {', '.join(names)} [ERROR: Too many Leaders]"
 
         # Same for Base
         if not bases:
             base_display = "Base: None"
         elif len(bases) == 1:
-            base_name = next(c["name"] for c in self.app.cards if c["card_key"] == bases[0])
+            base_name = next(c["Name"] for c in self.app.cards if c["card_key"] == bases[0])
             base_display = f"Base: {base_name}"
         else:
-            names = [next(c["name"] for c in self.app.cards if c["card_key"] == k) for k in bases]
+            names = [next(c["Name"] for c in self.app.cards if c["card_key"] == k) for k in bases]
             base_display = f"Base: {', '.join(names)} [ERROR: Too many Bases]"
 
         self.leader_var.set(leader_display)
@@ -397,22 +472,18 @@ class DeckBuilderTab:
 
     def load_deck_table(self):
         self.card_tree.delete(*self.card_tree.get_children())
+        self.card_tree["displaycolumns"] = self.visible_columns
 
         for card_key, count in self.deck_data.get("cards", {}).items():
-            card = next((c for c in self.app.cards if c["card_key"] == card_key), None)
-            if not card:
-                continue
+            card = next((c for c in self.app.cards if c["card_key"] == card_key), {})
+            row_data = dict(card)
+            row_data["CardKey"] = card_key
+            row_data["Owned"] = self.app.collection.get(card_key, 0)
+            row_data["In Deck"] = count
 
-            self.card_tree.insert("", "end", values=(
-                card_key,  # Store card_key here
-                self.app.collection.get(card_key, 0),
-                count,
-                card.get("name", "Unknown"),
-                card.get("set_code", ""),
-                card.get("type", ""),
-                card.get("arenas", ""),
-                card.get("aspect", "")
-            ))
+            # Make sure everything is converted to string for display
+            values = [json.dumps(row_data.get(col, "")) if isinstance(row_data.get(col), (list, dict)) else str(row_data.get(col, "")) for col in self.card_tree["columns"]]
+            self.card_tree.insert("", "end", values=values)
 
     def save_deck_status(self, event=None):
         if not self.deck_data:
@@ -452,51 +523,180 @@ class DeckBuilderTab:
         for widget in self.breakdown_frame.winfo_children():
             widget.destroy()
 
+
     def update_search_dropdown(self, event=None):
         if not self.deck_data:
             return
 
         query = self.search_var.get().lower()
-        
-        # Destroy previous popup
-        if self.search_popup:
-            self.search_popup.destroy()
-            self.search_popup = None
-
-        if not query:
-            return
+        if getattr(self, "last_query", None) == query:
+            return  # Prevent rebuild if query hasn't changed
+        self.last_query = query
 
         cards = self.app.cards
         if self.from_inventory_var.get():
             cards = [c for c in cards if self.app.collection.get(c["card_key"], 0) > 0]
 
-        matches = [c for c in cards if query in c.get("name", "").lower()]
-        self.matching_cards = matches
+        matches = sorted(
+            [(fuzz.partial_ratio(query, c.get("Name", "").lower()), c) for c in cards],
+            key=lambda x: x[0],
+            reverse=True
+        )
+        self.matching_cards = [c for score, c in matches if score > CONFIG["search"]["fuzzy_threshold"]]
 
-        if not matches:
+        if not self.matching_cards:
+            if hasattr(self, "search_popup") and self.search_popup:
+                self.search_popup.destroy()
+                self.search_popup = None
             return
 
-        # Create popup Listbox
-        self.search_popup = tk.Toplevel(self.root)
-        self.search_popup.wm_overrideredirect(True)
-        x = self.search_entry.winfo_rootx()
-        y = self.search_entry.winfo_rooty() + self.search_entry.winfo_height()
-        self.search_popup.geometry(f"+{x}+{y}")
+        if not hasattr(self, "search_popup") or not self.search_popup:
+            self.search_popup = tk.Toplevel(self.root)
+            self.search_popup.wm_overrideredirect(True)
+            x = self.search_entry.winfo_rootx()
+            y = self.search_entry.winfo_rooty() + self.search_entry.winfo_height()
+            self.search_popup.geometry(f"+{x}+{y}")
 
-        listbox = tk.Listbox(self.search_popup, width=50)
-        listbox.pack()
-        
-        for idx, card in enumerate(matches[:20]):
-            display = f'{card["name"]} ({card["set_code"]} #{card["collector_number"]})'
-            listbox.insert(tk.END, display)
+            self.search_listbox = tk.Listbox(self.search_popup, width=50)
+            self.search_listbox.pack()
 
-        def on_select(event):
-            selection = listbox.curselection()
-            if selection:
-                self.add_card_from_dropdown(selection[0])
+            self.search_listbox.bind("<Double-1>", self._on_listbox_select)
+            self.search_listbox.bind("<Return>", self._on_listbox_select)
+            self.search_listbox.bind("<Motion>", self._show_preview)
+            self.search_listbox.bind("<Leave>", self._hide_preview)
+        else:
+            self.search_listbox.delete(0, tk.END)
 
-        listbox.bind("<Double-1>", on_select)
-        listbox.bind("<Return>", on_select)
+        for idx, card in enumerate(self.matching_cards[:20]):
+            subtitle = card.get("Subtitle", "").strip()
+            if subtitle:
+                display = f'{card["Name"]} — {subtitle} ({card["Set"]} #{card["Number"]})'
+            else:
+                display = f'{card["Name"]} ({card["Set"]} #{card["Number"]})'
+            self.search_listbox.insert(tk.END, display)
+
+        if not hasattr(self, "dropdown_active_index") or self.dropdown_active_index >= self.search_listbox.size():
+            self.dropdown_active_index = 0
+
+        self.search_listbox.select_clear(0, tk.END)
+        self.search_listbox.select_set(self.dropdown_active_index)
+        self.search_listbox.activate(self.dropdown_active_index)
+        self.search_listbox.see(self.dropdown_active_index)
+        self.search_entry.focus_set()
+
+        def close_all():
+            if self.search_popup:
+                self.search_popup.destroy()
+                self.search_popup = None
+            if hasattr(self, "hover_preview") and self.hover_preview:
+                self.hover_preview.destroy()
+                self.hover_preview = None
+            self.last_query = ""
+            self.dropdown_active_index = 0
+            self.search_entry.focus_set()
+
+        def on_click_outside(event):
+            widget = event.widget
+            if widget not in (self.search_popup, self.search_entry, self.search_listbox) and not str(widget).startswith(str(self.search_popup)):
+                close_all()
+
+        self.root.after(100, lambda: setattr(self, "outside_click_id", self.root.bind("<Button-1>", on_click_outside)))
+
+        def navigate_dropdown(event):
+            if not self.search_popup or not hasattr(self, "matching_cards"):
+                return "break"
+
+            listbox_size = self.search_listbox.size()
+
+            if event.keysym == "Up":
+                self.dropdown_active_index = max(0, self.dropdown_active_index - 1)
+            elif event.keysym == "Down":
+                self.dropdown_active_index = min(listbox_size - 1, self.dropdown_active_index + 1)
+            elif event.keysym == "Return":
+                self.add_card_from_dropdown(self.dropdown_active_index)
+                close_all()
+                return "break"
+            elif event.keysym == "Escape":
+                close_all()
+                return "break"
+
+            self.search_listbox.select_clear(0, tk.END)
+            self.search_listbox.select_set(self.dropdown_active_index)
+            self.search_listbox.activate(self.dropdown_active_index)
+            self.search_listbox.see(self.dropdown_active_index)
+            return "break"
+
+        self.search_entry.bind("<Up>", navigate_dropdown)
+        self.search_entry.bind("<Down>", navigate_dropdown)
+        self.search_entry.bind("<Return>", navigate_dropdown)
+        self.search_entry.bind("<Escape>", navigate_dropdown)
+
+    def _on_listbox_select(self, event):
+        if not hasattr(self, "search_listbox"):
+            return
+        selection = self.search_listbox.curselection()
+        if selection:
+            self.root.unbind("<Button-1>", self.outside_click_id)
+            self.add_card_from_dropdown(selection[0])
+
+    def _show_preview(self, event):
+        if not hasattr(self, "search_listbox"):
+            return
+        index = self.search_listbox.nearest(event.y)
+        if index < 0 or index >= len(self.matching_cards):
+            return
+
+        card = self.matching_cards[index]
+        art_url = card.get("FrontArt", "")
+        if not art_url:
+            return
+
+        from PIL import Image, ImageTk
+        import requests
+
+        card_key = card["card_key"]
+        cache_path = os.path.join(CONFIG["data"]["image_folder"], f"{card_key}_front.jpg")
+        os.makedirs(CONFIG["data"]["image_folder"], exist_ok=True)
+
+        try:
+            if not os.path.exists(cache_path):
+                img_data = requests.get(art_url).content
+                with open(cache_path, "wb") as f:
+                    f.write(img_data)
+
+            img = Image.open(cache_path)
+            card_type = card.get("Type", "").lower()
+            if card_type in ["leader", "base"]:
+                img = img.resize((420, 300), Image.Resampling.LANCZOS)
+            else:
+                img = img.resize((300, 420), Image.Resampling.LANCZOS)
+
+            photo = ImageTk.PhotoImage(img)
+
+            # Destroy previous preview if it exists
+            if hasattr(self, "hover_preview") and self.hover_preview:
+                for widget in self.hover_preview.winfo_children():
+                    widget.destroy()
+                self.hover_preview.destroy()
+                self.hover_preview = None
+
+            self.hover_preview = tk.Toplevel(self.root)
+            self.hover_preview.wm_overrideredirect(True)
+            self.hover_preview.geometry(f"+{event.x_root+20}+{event.y_root+10}")
+
+            img_label = tk.Label(self.hover_preview, image=photo)
+            img_label.image = photo  # Keep reference
+            img_label.pack()
+
+        except Exception as e:
+            print("Image preview error:", e)
+
+    def _hide_preview(self, event):
+        if hasattr(self, "hover_preview") and self.hover_preview:
+            for widget in self.hover_preview.winfo_children():
+                widget.destroy()
+            self.hover_preview.destroy()
+            self.hover_preview = None
 
     def add_card_from_dropdown(self, index):
         card = self.matching_cards[index]
@@ -564,3 +764,9 @@ class DeckBuilderTab:
 
         entry.bind("<Return>", save_edit)
         entry.bind("<FocusOut>", save_edit)
+
+    def debounce_search(self, event=None):
+        if hasattr(self, "search_after_id"):
+            self.root.after_cancel(self.search_after_id)
+        self.search_after_id = self.root.after(150, self.update_search_dropdown)
+

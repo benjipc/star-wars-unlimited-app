@@ -3,6 +3,7 @@ from tkinter import ttk, messagebox
 from PIL import Image, ImageTk
 import os
 import requests
+import json
 from io import BytesIO
 from app.config import CONFIG
 
@@ -24,37 +25,75 @@ class CardDetailWindow:
 
         self.create_ui()
 
+        self.detail_window.bind("<Enter>", self._bind_scroll)
+        self.detail_window.bind("<Leave>", self._unbind_scroll)
+        self.detail_window.protocol("WM_DELETE_WINDOW", self._on_close)
+
+
     def create_ui(self):
-        canvas = tk.Canvas(self.detail_window)
-        scrollbar = ttk.Scrollbar(self.detail_window, orient="vertical", command=canvas.yview)
-        scrollable_frame = tk.Frame(canvas)
+        self.canvas = tk.Canvas(self.detail_window)
+        self.scrollbar = ttk.Scrollbar(self.detail_window, orient="vertical", command=self.canvas.yview)
+        self.scrollable_frame = tk.Frame(self.canvas)
 
-        scrollable_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        self.scrollable_frame.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
+        self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        self.canvas.configure(yscrollcommand=self.scrollbar.set)
 
-        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
+        self.canvas.pack(side="left", fill="both", expand=True)
+        self.scrollbar.pack(side="right", fill="y")
 
-        canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
+        # Mousewheel scroll binding
+        self.scrollable_frame.bind("<Enter>", self._bind_scroll)
+        self.scrollable_frame.bind("<Leave>", self._unbind_scroll)
 
-        self.add_image_section(scrollable_frame)
-        self.add_card_info(scrollable_frame)
+        self.add_image_section(self.scrollable_frame)
+        ttk.Separator(self.scrollable_frame, orient='horizontal').pack(fill='x', pady=10)
+        self.add_card_info(self.scrollable_frame)
+
+    def _bind_scroll(self, event=None):
+        self.canvas.bind_all("<MouseWheel>", self._on_mousewheel)      # Windows/macOS
+        self.canvas.bind_all("<Button-4>", self._on_mousewheel)        # Linux scroll up
+        self.canvas.bind_all("<Button-5>", self._on_mousewheel)        # Linux scroll down
+
+    def _unbind_scroll(self, event=None):
+        self.canvas.unbind_all("<MouseWheel>")
+        self.canvas.unbind_all("<Button-4>")
+        self.canvas.unbind_all("<Button-5>")
+
+    def _on_mousewheel(self, event):
+        if event.delta:  # Windows/macOS
+            self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        elif event.num == 4:  # Linux scroll up
+            self.canvas.yview_scroll(-1, "units")
+        elif event.num == 5:  # Linux scroll down
+            self.canvas.yview_scroll(1, "units")
+
+    def _on_close(self):
+        self._unbind_scroll()
+        self.detail_window.destroy()
+
 
     def add_image_section(self, parent):
         image_frame = tk.Frame(parent)
-        image_frame.pack(pady=10)
+        image_frame.pack(pady=10, fill="x")
 
         self.image_label = tk.Label(image_frame)
-        self.image_label.pack()
+        self.image_label.pack(anchor="center")
 
         self.load_image()
 
-        if self.card.get("BackArt"):
-            flip_button = tk.Button(parent, text="Flip Card", command=self.flip_image)
-            flip_button.pack(pady=2)
+        button_frame = tk.Frame(parent)
+        button_frame.pack(pady=2)
 
-        view_full_button = tk.Button(parent, text="View Full Art", command=self.open_full_art)
-        view_full_button.pack(pady=5)
+        if self.card.get("BackArt"):
+            flip_button = tk.Button(button_frame, text="Flip Card", command=self.flip_image)
+            flip_button.pack(side="left", padx=5)
+
+        view_full_button = tk.Button(button_frame, text="View Full Art", command=self.open_full_art)
+        view_full_button.pack(side="left", padx=5)
+
+        # Center the whole button row
+        button_frame.pack(anchor="center")
 
     def load_image(self):
         image_url = self.card.get("FrontArt") if self.is_front_image else self.card.get("BackArt")
@@ -76,7 +115,7 @@ class CardDetailWindow:
                 messagebox.showerror("Error", f"Failed to load image: {e}")
                 return
 
-        card_type = self.card.get("type", "").lower()
+        card_type = self.card.get("Type", "").lower()
         if not self.is_front_image or card_type not in ["leader", "base"]:
             image_data = image_data.resize((375, 525), Image.Resampling.LANCZOS)
         else:
@@ -102,8 +141,14 @@ class CardDetailWindow:
         img_label.pack()
 
     def add_card_info(self, parent):
-        tk.Label(parent, text=self.card.get("name", "Unknown Card"), font=("Arial", 14, "bold")).pack(pady=5)
+        # Card Title
+        tk.Label(parent, text=self.card.get("Name", "Unknown Card"),
+                font=("Arial", 14, "bold")).pack(pady=2, anchor="center")
 
+        # Subtitle
+        tk.Label(parent, text=self.card.get("Subtitle", ""),
+                font=("Arial", 12)).pack(pady=5, anchor="center")
+        
         owned_qty = tk.IntVar(value=self.card_app.collection.get(self.card["card_key"], 0))
 
         def update_owned(new_qty):
@@ -114,7 +159,8 @@ class CardDetailWindow:
             self.card_app.ui.load_table(owned_only=True)
 
         owned_frame = tk.Frame(parent)
-        owned_frame.pack(pady=5)
+        ttk.Separator(parent, orient='horizontal').pack(fill='x', pady=10)
+        owned_frame.pack(pady=5, anchor="center")  # <-- key change
 
         tk.Label(owned_frame, text="Owned:").pack(side="left", padx=5)
         tk.Button(owned_frame, text="-", command=lambda: update_owned(max(0, owned_qty.get() - 1))).pack(side="left")
@@ -123,10 +169,10 @@ class CardDetailWindow:
 
         # Card Stats
         stats_text = (
-            f"Type: {self.card.get('type', '')}\n"
-            f"Arenas: {self.card.get('arenas', '')}\n"
-            f"Aspect: {self.card.get('aspect', '')}\n"
-            f"Cost: {self.card.get('cost', '')}   Power: {self.card.get('power', '')}   Health: {self.card.get('health', '')}\n"
+            f"Type: {self.card.get('Type', '')}\n"
+            f"Arenas: {self.card.get('Arenas', '')}\n"
+            f"Aspect: {self.card.get('Aspects', '')}\n"
+            f"Cost: {self.card.get('Cost', '')}   Power: {self.card.get('Power', '')}   Health: {self.card.get('HP', '')}\n"
             f"Traits: {', '.join(self.card.get('Traits', []))}\n"
         )
 
@@ -142,3 +188,84 @@ class CardDetailWindow:
         if back_text:
             tk.Label(parent, text="Back Text:", font=("Arial", 12, "bold")).pack(pady=(5, 2), padx=10, anchor="w")
             tk.Label(parent, text=back_text, wraplength=550, justify="left", font=("Arial", 10, "italic")).pack(pady=(0, 10), padx=10, anchor="w")
+
+        # Separator line
+        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=10)
+
+        # Related cards (collapsible section)
+        related_frame = tk.Frame(parent)
+        related_frame.pack(fill="x", padx=10, pady=(0, 5))
+
+        is_expanded = tk.BooleanVar(value=False)
+
+        toggle_button = tk.Label(related_frame, text="▶ Related Cards", font=("Arial", 12, "bold"), cursor="hand2")
+        toggle_button.pack(anchor="w")
+
+        related_list_frame = tk.Frame(related_frame)
+        related_list_frame.pack(fill="x", padx=20, anchor="w")
+        related_list_frame.pack_forget()  # Start collapsed
+
+        def toggle_related():
+            if is_expanded.get():
+                related_list_frame.pack_forget()
+                toggle_button.config(text="▶ Related Cards")
+                is_expanded.set(False)
+            else:
+                related_list_frame.pack(fill="x", padx=20, anchor="w")
+                toggle_button.config(text="▼ Related Cards")
+                is_expanded.set(True)
+
+        toggle_button.bind("<Button-1>", lambda e: toggle_related())
+
+        # Populate related cards
+        current_words = set(self.card["Name"].lower().split())
+        related_cards = []
+        for other_card in self.card_app.cards:
+            if other_card["card_key"] == self.card["card_key"]:
+                continue
+            other_words = set(other_card["Name"].lower().split())
+            if current_words & other_words:
+                related_cards.append(other_card)
+
+        for related in related_cards:
+            subtitle = related.get("Subtitle", "").strip()
+            name = related["Name"]
+            display = f"{name} - {subtitle}" if subtitle else name
+            text = f"{display} - {related['Type']} ({related['card_key']})"
+            link = tk.Label(related_list_frame, text=text, fg="blue", cursor="hand2", font=("Arial", 10, "underline"))
+            link.pack(anchor="w")
+            link.bind("<Button-1>", lambda e, c=related: CardDetailWindow(self.parent, self.card_app, c))
+
+        # Separator before All Data
+        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=10)
+
+        # All Data (collapsible)
+        all_data_frame = tk.Frame(parent)
+        all_data_frame.pack(fill="x", padx=10, pady=(0, 5))
+
+        data_expanded = tk.BooleanVar(value=False)
+
+        data_toggle = tk.Label(all_data_frame, text="▶ All Data", font=("Arial", 12, "bold"), cursor="hand2")
+        data_toggle.pack(anchor="w")
+
+        all_data_text_frame = tk.Frame(all_data_frame)
+        all_data_text_frame.pack(fill="x", padx=20, anchor="w")
+        all_data_text_frame.pack_forget()
+
+        def toggle_all_data():
+            if data_expanded.get():
+                all_data_text_frame.pack_forget()
+                data_toggle.config(text="▶ All Data")
+                data_expanded.set(False)
+            else:
+                all_data_text_frame.pack(fill="x", padx=20, anchor="w")
+                data_toggle.config(text="▼ All Data")
+                data_expanded.set(True)
+
+        data_toggle.bind("<Button-1>", lambda e: toggle_all_data())
+
+        # Display all raw card data
+        raw_text = tk.Text(all_data_text_frame, wrap="word", height=15, font=("Courier", 9))
+        raw_text.pack(fill="x", pady=5)
+        raw_text.insert("1.0", json.dumps(self.card, indent=2))
+        raw_text.config(state="disabled")

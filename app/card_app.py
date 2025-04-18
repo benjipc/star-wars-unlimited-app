@@ -116,26 +116,11 @@ class CardApp:
                             logging.warning(f"Skipping invalid card in {set_code}: {error_message}")
                             continue
 
+                        # Add internal key without discarding other data
                         card_key = f"{card.get('Set', '')}-{card.get('Number', '')}-{card.get('VariantType', 'Normal')}"
-                        normalized_card = {
-                            "card_key": card_key,
-                            "name": card.get("Name", ""),
-                            "type": card.get("Type", ""),
-                            "aspect": ", ".join(card.get("Aspects", [])),
-                            "set_code": card.get("Set", ""),
-                            "collector_number": card.get("Number", ""),
-                            "variant": card.get("VariantType", "Normal"),
-                            "cost": card.get("Cost", ""),
-                            "power": card.get("Power", ""),
-                            "health": card.get("HP", ""),
-                            "arenas": ", ".join(card.get("Arenas", [])),
-                            "FrontText": card.get("FrontText", ""),
-                            "BackText": card.get("BackText", ""),
-                            "FrontArt": card.get("FrontArt", ""),
-                            "BackArt": card.get("BackArt", ""),
-                            "Traits": card.get("Traits", [])
-                        }
-                        normalized_cards.append(normalized_card)
+                        card["card_key"] = card_key
+                        normalized_cards.append(card)
+
                     all_cards.extend(normalized_cards)
             if not all_cards:
                 raise ValueError("No valid cards were found")

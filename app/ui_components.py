@@ -1,5 +1,4 @@
 import tkinter as tk
-import tkinter as ttk
 from tkinter import ttk, simpledialog, messagebox
 from rapidfuzz import fuzz
 from app.config import CONFIG
@@ -15,7 +14,6 @@ class UIComponents:
         self.root = app.root
         self.cards = app.cards
         self.collection = app.collection
-        
 
         self.setup_menu()
         self.setup_tabs()
@@ -76,14 +74,18 @@ class UIComponents:
             tk.Label(frame, text=label).grid(row=0, column=i, padx=5)
 
         filter_data = {
-            "set_code": set_var,
-            "type": type_var,
-            "aspect": aspect_var,
-            "arenas": arena_var,
+            "Set": set_var,
+            "Type": type_var,
+            "Aspects": aspect_var,
+            "Arenas": arena_var,
         }
 
         for i, (key, var) in enumerate(filter_data.items(), start=3):
-            values = sorted(set(v for c in cards for v in (c.get(key, "").split(", ") if key in ["aspect", "arenas"] else [c.get(key, "")]) if v))
+            values = sorted(set(
+                v for c in cards for v in (
+                    c.get(key, []) if isinstance(c.get(key), list) else c.get(key, "").split(", ")
+                ) if v
+            ))
             cb = ttk.Combobox(frame, textvariable=var, state="readonly", width=12)
             cb["values"] = ["All"] + values
             cb.set("All")
@@ -129,15 +131,15 @@ class UIComponents:
             tree.insert("", "end", values=(
                 card["card_key"],
                 self.collection.get(card["card_key"], 0),
-                card.get("name", "Unknown"),
-                card.get("set_code", ""),
-                card.get("collector_number", ""),
-                card.get("type", ""),
-                card.get("aspect", ""),
-                card.get("arenas", ""),
-                card.get("cost", ""),
-                card.get("power", ""),
-                card.get("health", "")
+                card.get("Name", "Unknown"),
+                card.get("Set", ""),
+                card.get("Number", ""),
+                card.get("Type", ""),
+                ", ".join(card.get("Aspects")) if "Aspects" in card else card.get("Aspects", ""),
+                ", ".join(card.get("Arenas")) if "Arenas" in card else card.get("Arenas", ""),
+                card.get("Cost", ""),
+                card.get("Power", ""),
+                card.get("HP", "")
             ))
 
     def search_cards(self, owned=False):
@@ -153,16 +155,18 @@ class UIComponents:
         filtered = []
 
         for card in data:
-            score = fuzz.partial_ratio(query, card.get("name", "").lower()) if query else 100
+            score = fuzz.partial_ratio(query, card.get("Name", "").lower()) if query else 100
             if score < CONFIG["search"]["fuzzy_threshold"]:
                 continue
-            if s_set != "All" and card.get("set_code", "") != s_set:
+            if s_set != "All" and card.get("Set", "") != s_set:
                 continue
-            if s_type != "All" and card.get("type", "") != s_type:
+            if s_type != "All" and card.get("Type", "") != s_type:
                 continue
-            if s_aspect != "All" and s_aspect not in card.get("aspect", ""):
+            aspects = card.get("Aspects") if "Aspects" in card else card.get("Aspects", "").split(", ")
+            if s_aspect != "All" and s_aspect not in aspects:
                 continue
-            if s_arena != "All" and s_arena not in card.get("arenas", ""):
+            arenas = card.get("Arenas") if "Arenas" in card else card.get("Arenas", "").split(", ")
+            if s_arena != "All" and s_arena not in arenas:
                 continue
             filtered.append((score, card))
 
@@ -172,15 +176,15 @@ class UIComponents:
             tree.insert("", "end", values=(
                 card["card_key"],
                 self.collection.get(card["card_key"], 0),
-                card.get("name", "Unknown"),
-                card.get("set_code", ""),
-                card.get("collector_number", ""),
-                card.get("type", ""),
-                card.get("aspect", ""),
-                card.get("arenas", ""),
-                card.get("cost", ""),
-                card.get("power", ""),
-                card.get("health", "")
+                card.get("Name", "Unknown"),
+                card.get("Set", ""),
+                card.get("Number", ""),
+                card.get("Type", ""),
+                ", ".join(card.get("Aspects")) if "Aspects" in card else card.get("Aspects", ""),
+                ", ".join(card.get("Arenas")) if "Arenas" in card else card.get("Arenas", ""),
+                card.get("Cost", ""),
+                card.get("Power", ""),
+                card.get("HP", "")
             ))
 
     def reset_filters(self, owned=False):
