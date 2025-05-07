@@ -154,70 +154,64 @@ class DeckBuilderTab:
             self.header_menu.tk_popup(event.x_root, event.y_root)
 
     def _open_column_config(self):
-        # Discover all possible columns
-        all_columns = set()
+        default_order = ["CardKey", "Owned", "In Deck", "Name", "Set", "Type", "Arenas", "Aspect"]
+
+        # Get all possible keys from cards
+        all_keys = set()
         for card in self.app.cards:
-            all_columns.update(card.keys())
-        all_columns.update(["CardKey", "Owned", "In Deck"])
-        all_columns = sorted(all_columns)
+            all_keys.update(card.keys())
+        all_keys.update(default_order)
+
+        # Preserve default order and append any extras
+        extra_keys = [k for k in sorted(all_keys) if k not in default_order]
+        all_columns = default_order + extra_keys
 
         config_win = tk.Toplevel(self.root)
         config_win.title("Configure Visible Columns")
-        config_win.geometry("400x500")
+        config_win.geometry("500x600")
 
         tk.Label(config_win, text="Toggle columns to display:", font=("Arial", 12)).pack(pady=(10, 0))
 
-        # Scrollable checkbox area
-        canvas = tk.Canvas(config_win)
-        scrollbar = ttk.Scrollbar(config_win, orient="vertical", command=canvas.yview)
-        scroll_frame = tk.Frame(canvas)
+        container = tk.Frame(config_win)
+        container.pack(fill="both", expand=True, padx=10, pady=5)
 
-        scroll_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas.create_window((0, 0), window=scroll_frame, anchor="nw")
+        canvas = tk.Canvas(container)
+        scrollbar = ttk.Scrollbar(container, orient="vertical", command=canvas.yview)
+        scrollable_frame = tk.Frame(canvas)
+
+        scrollable_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
 
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
 
-        # Two-column layout
+        # Create checkboxes in two columns
         check_vars = {}
-        col_frame_left = tk.Frame(scroll_frame)
-        col_frame_right = tk.Frame(scroll_frame)
-        col_frame_left.pack(side="left", fill="both", expand=True, padx=(10, 5))
-        col_frame_right.pack(side="left", fill="both", expand=True, padx=(5, 10))
-
-        half = (len(all_columns) + 1) // 2
         for i, col in enumerate(all_columns):
             var = tk.BooleanVar(value=col in self.visible_columns)
-            cb = tk.Checkbutton(
-                col_frame_left if i < half else col_frame_right,
-                text=col,
-                variable=var,
-                anchor="w"
-            )
-            cb.pack(fill="x", anchor="w")
             check_vars[col] = var
+            cb = tk.Checkbutton(scrollable_frame, text=col, variable=var)
+            cb.grid(row=i // 2, column=i % 2, sticky="w", padx=10, pady=2)
 
-        def apply_and_close():
-            self.visible_columns = [col for col, var in check_vars.items() if var.get()]
-            self.card_tree["columns"] = self.visible_columns
-            self.card_tree["displaycolumns"] = self.visible_columns
-
-            for col in self.visible_columns:
-                self.card_tree.heading(col, text=col)
-                self.card_tree.column(col, width=100, stretch=True)
-
-            self.load_deck_table()
-            config_win.destroy()
-
-        def cancel_and_close():
-            config_win.destroy()
-
+        # Buttons underneath
         button_frame = tk.Frame(config_win)
         button_frame.pack(pady=10)
 
-        tk.Button(button_frame, text="OK", command=apply_and_close).pack(side="left", padx=5)
-        tk.Button(button_frame, text="Cancel", command=cancel_and_close).pack(side="left", padx=5)
+        tk.Button(button_frame, text="OK", width=10,
+                command=lambda: self._apply_column_config(check_vars, config_win)).pack(side="left", padx=10)
+        tk.Button(button_frame, text="Cancel", width=10, command=config_win.destroy).pack(side="right", padx=10)
+
+
+    def _apply_column_config(self, check_vars, config_win):
+        self.visible_columns = [col for col, var in check_vars.items() if var.get()]
+        self.card_tree["columns"] = self.visible_columns
+        self.card_tree["displaycolumns"] = self.visible_columns
+        for col in self.visible_columns:
+            self.card_tree.heading(col, text=col)
+            self.card_tree.column(col, width=100, stretch=True)
+        self.load_deck_table()
+        config_win.destroy()
 
     def load_deck_tree(self):
         self.deck_tree.delete(*self.deck_tree.get_children())

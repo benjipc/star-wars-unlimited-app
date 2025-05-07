@@ -1,6 +1,5 @@
-from typing import *
+from typing import *  # noqa: F403
 import tkinter as tk
-from tkinter import ttk
 from tkinter import messagebox
 import os
 import json

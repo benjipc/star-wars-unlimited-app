@@ -6,7 +6,6 @@ from app.validators import CardValidator
 from app.data_manager import save_collection
 from app.card_detail_window import CardDetailWindow
 from app.deck_builder_ui import DeckBuilderTab
-from app.card import Card
 from app.app_interfaces import ICardApp
 
 class UIComponents:

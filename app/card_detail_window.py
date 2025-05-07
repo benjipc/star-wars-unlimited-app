@@ -4,8 +4,6 @@ from PIL import Image, ImageTk
 import os
 import json
 from app.config import CONFIG
-from pathlib import Path
-from app.card import Card, ImageManager
 from typing import Dict, Any
 
 class CardDetailWindow:
