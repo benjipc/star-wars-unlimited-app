@@ -13,19 +13,26 @@ from app.data_manager import load_cards, load_collection, save_collection
 from app.validators import CardValidator
 from app.card_detail_window import CardDetailWindow
 from app.ui_components import UIComponents
+from app.card import ImageManager
+from app.app_interfaces import ICardApp
 
 
-class CardApp:
+class CardApp(ICardApp):
     def __init__(self, root):
         self.root = root
         self.root.title(CONFIG["window"]["title"])
-
+        self.image_manager = ImageManager(CONFIG["data"]["image_folder"])
+        
         # Dynamic window size
         self.setup_window()
-
+        
+        # Initialize private attributes for properties
+        self._cards = []
+        self._collection = {}
+        
         # Load data
-        self.cards = load_cards()
-        self.collection = load_collection()
+        self._cards = load_cards()
+        self._collection = load_collection()
         os.makedirs(CONFIG["data"]["image_folder"], exist_ok=True)
 
         self.default_sets = CONFIG["default_sets"]
@@ -35,6 +42,22 @@ class CardApp:
 
         # Clean exit handler
         self.root.protocol("WM_DELETE_WINDOW", self.on_exit)
+
+    @property
+    def cards(self) -> List[Dict[str, Any]]:
+        return self._cards
+    
+    @cards.setter
+    def cards(self, value: List[Dict[str, Any]]) -> None:
+        self._cards = value
+    
+    @property
+    def collection(self) -> Dict[str, Any]:
+        return self._collection
+    
+    @collection.setter
+    def collection(self, value: Dict[str, Any]) -> None:
+        self._collection = value
 
     def setup_window(self):
         screen_width = self.root.winfo_screenwidth()

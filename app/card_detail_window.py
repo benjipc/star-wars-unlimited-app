@@ -2,24 +2,25 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from PIL import Image, ImageTk
 import os
-import requests
 import json
-from io import BytesIO
 from app.config import CONFIG
+from pathlib import Path
+from app.card import Card, ImageManager
+from typing import Dict, Any
 
 class CardDetailWindow:
-    def __init__(self, parent, card_app, card):
+    def __init__(self, parent, card_app, card: Dict[str, Any]):
         self.parent = parent
-        self.card_app = card_app
         self.card = card
+        self.card_app = card_app
         self.is_front_image = True
         self.image_path = ""
         self.image_folder = "images"
         
-        os.makedirs(self.image_folder, exist_ok=True) #TODO: move to app/data_manager.py
+        os.makedirs(self.image_folder, exist_ok=True)
 
         self.detail_window = tk.Toplevel(self.parent)
-        self.detail_window.title(f"Card Info - {card.get('name', '')}")
+        self.detail_window.title(f"Card Info - {card.get('Name', '')}")
         self.detail_window.geometry("600x700")
 
         self.create_ui()
@@ -79,65 +80,63 @@ class CardDetailWindow:
         self.image_label = tk.Label(image_frame)
         self.image_label.pack(anchor="center")
 
-        self.load_image()
+        card_key = self.card.get("card_key", "")
+        suffix = "back" if not self.is_front_image else "front"
+        image_path = os.path.join(CONFIG["data"]["image_folder"], f"{card_key}_{suffix}.jpg")
+        
+        try:
+            image_data = Image.open(image_path)
+            self.image_path = image_path
+            
+            card_type = self.card.get("Type", "").lower()
+            if not self.is_front_image or card_type not in ["leader", "base"]:
+                image_data = image_data.resize((375, 525), Image.Resampling.LANCZOS)
+            else:
+                image_data = image_data.resize((525, 375), Image.Resampling.LANCZOS)
+                
+            photo = ImageTk.PhotoImage(image_data)
+            self.image_label.configure(image=photo)
+            self.image_label.image = photo  # Keep reference to prevent garbage collection
+        except (FileNotFoundError, IOError):
+            print(f"Image not found: {image_path}")
+            self.image_label.configure(text="Image not found")
 
         button_frame = tk.Frame(parent)
         button_frame.pack(pady=2)
 
-        if self.card.get("BackArt"):
+        if self.card.get("BackArt"):  
             flip_button = tk.Button(button_frame, text="Flip Card", command=self.flip_image)
             flip_button.pack(side="left", padx=5)
 
         view_full_button = tk.Button(button_frame, text="View Full Art", command=self.open_full_art)
         view_full_button.pack(side="left", padx=5)
 
-        # Center the whole button row
         button_frame.pack(anchor="center")
-
-    def load_image(self):
-        image_url = self.card.get("FrontArt") if self.is_front_image else self.card.get("BackArt")
-        if not image_url:
-            return
-
-        image_name = f"{self.card['card_key']}_{'front' if self.is_front_image else 'back'}.jpg"
-        self.image_path = os.path.join(self.image_folder, image_name)
-
-        if os.path.exists(self.image_path):
-            image_data = Image.open(self.image_path)
-        else:
-            try:
-                response = requests.get(image_url)
-                response.raise_for_status()
-                image_data = Image.open(BytesIO(response.content))
-                image_data.save(self.image_path)
-            except Exception as e:
-                messagebox.showerror("Error", f"Failed to load image: {e}")
-                return
-
-        card_type = self.card.get("Type", "").lower()
-        if not self.is_front_image or card_type not in ["leader", "base"]:
-            image_data = image_data.resize((375, 525), Image.Resampling.LANCZOS)
-        else:
-            image_data = image_data.resize((525, 375), Image.Resampling.LANCZOS)
-
-        photo = ImageTk.PhotoImage(image_data)
-        self.image_label.configure(image=photo)
-        self.image_label.image = photo
 
     def flip_image(self):
         self.is_front_image = not self.is_front_image
-        self.load_image()
+        self.add_image_section(self.scrollable_frame)  # Reload the image section
 
     def open_full_art(self):
-        art_window = tk.Toplevel(self.parent)
-        art_window.title("Full Art View")
+        try:
+            art_window = tk.Toplevel(self.parent)
+            art_window.title("Full Art View")
 
-        full_img = Image.open(self.image_path)
-        photo = ImageTk.PhotoImage(full_img)
-
-        img_label = tk.Label(art_window, image=photo)
-        img_label.image = photo
-        img_label.pack()
+            card_key = self.card.get("card_key", "")
+            suffix = "back" if not self.is_front_image else "front"
+            image_path = os.path.join(CONFIG["data"]["image_folder"], f"{card_key}_{suffix}.jpg")
+            
+            try:
+                full_img = Image.open(image_path)
+                photo = ImageTk.PhotoImage(full_img)
+                img_label = tk.Label(art_window, image=photo)
+                img_label.image = photo  # Keep reference
+                img_label.pack()
+            except Exception as e:
+                tk.Label(art_window, text=f"Error loading image: {e}").pack()
+                
+        except Exception as e:
+            messagebox.showerror("Error", f"Could not open full art view: {e}")
 
     def add_card_info(self, parent):
         # Card Title
@@ -159,7 +158,7 @@ class CardDetailWindow:
 
         owned_frame = tk.Frame(parent)
         ttk.Separator(parent, orient='horizontal').pack(fill='x', pady=10)
-        owned_frame.pack(pady=5, anchor="center")  # <-- key change
+        owned_frame.pack(pady=5, anchor="center")
 
         tk.Label(owned_frame, text="Owned:").pack(side="left", padx=5)
         tk.Button(owned_frame, text="-", command=lambda: update_owned(max(0, owned_qty.get() - 1))).pack(side="left")

@@ -6,10 +6,11 @@ from app.validators import CardValidator
 from app.data_manager import save_collection
 from app.card_detail_window import CardDetailWindow
 from app.deck_builder_ui import DeckBuilderTab
-
+from app.card import Card
+from app.app_interfaces import ICardApp
 
 class UIComponents:
-    def __init__(self, app):
+    def __init__(self, app: ICardApp):
         self.app = app
         self.root = app.root
         self.cards = app.cards
@@ -228,18 +229,12 @@ class UIComponents:
             self.search_cards(owned=(tree == self.app.owned_tree))
 
     def show_card_info(self, tree):
-        selected_item = tree.focus()
-        if not selected_item:
-            return
-
-        values = tree.item(selected_item, "values")
-        card_key = values[0]
-        card = next((c for c in self.cards if c["card_key"] == card_key), None)
-
-        if not card:
-            messagebox.showerror("Error", "Card data not found.")
-        else:
-            CardDetailWindow(self.root, self.app, card)
+        selected_item = tree.selection()
+        if selected_item:
+            card_key = tree.item(selected_item)['values'][0]
+            card = next((c for c in self.cards if c["card_key"] == card_key), None)
+            if card:
+                CardDetailWindow(self.root, self.app, card)
 
     def sort_column(self, tree, col, reverse):
         data = [(tree.set(k, col), k) for k in tree.get_children("")]
