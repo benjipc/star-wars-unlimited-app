@@ -3,6 +3,7 @@ import json
 import tkinter as tk
 from tkinter import ttk, simpledialog, messagebox
 from rapidfuzz import fuzz
+from app.image_fetcher import CardImageFetcher
 
 from app.config import CONFIG
 
@@ -54,7 +55,7 @@ class DeckBuilderTab:
         self.deck_tree.pack(fill="y", expand=True)
         self.deck_tree.bind("<Double-1>", self.on_deck_select)
         self.deck_tree.bind("<Return>", self.on_deck_select)
-        self.deck_tree.bind("<Delete>", self.delete_deck)
+        self.deck_tree.bind("<Delete>", lambda e: self.delete_deck())
 
         # Right-click Menus
         self.deck_menu = tk.Menu(self.root, tearoff=0)
@@ -634,56 +635,50 @@ class DeckBuilderTab:
             self.add_card_from_dropdown(selection[0])
 
     def _show_preview(self, event):
+        """Show a hovering preview of the card image when hovering over search results."""
         if not hasattr(self, "search_listbox"):
             return
+        
+        # Get the card at the current mouse position
         index = self.search_listbox.nearest(event.y)
         if index < 0 or index >= len(self.matching_cards):
             return
 
         card = self.matching_cards[index]
-        art_url = card.get("FrontArt", "")
-        if not art_url:
-            return
-
-        from PIL import Image, ImageTk
-        import requests
-
-        card_key = card["card_key"]
-        cache_path = os.path.join(CONFIG["data"]["image_folder"], f"{card_key}_front.jpg")
-        os.makedirs(CONFIG["data"]["image_folder"], exist_ok=True)
-
+        
         try:
-            if not os.path.exists(cache_path):
-                img_data = requests.get(art_url).content
-                with open(cache_path, "wb") as f:
-                    f.write(img_data)
-
-            img = Image.open(cache_path)
-            card_type = card.get("Type", "").lower()
-            if card_type in ["leader", "base"]:
-                img = img.resize((420, 300), Image.Resampling.LANCZOS)
-            else:
-                img = img.resize((300, 420), Image.Resampling.LANCZOS)
-
-            photo = ImageTk.PhotoImage(img)
+            # Fix the parameter name from "is_front" to match what CardImageFetcher expects
+            image_data, image_path = CardImageFetcher.load_card_image(card, True)  # Remove named parameter
+            if not image_data:
+                print(f"Preview image not found: {image_path}")
+                return
+                
+            # Fix this parameter name too
+            resized_image = CardImageFetcher.resize_card_image(image_data, card, True)  # Remove named parameter
+            
+            # Create a Tkinter photo
+            photo = CardImageFetcher.create_tk_photo(resized_image)
+            if not photo:
+                print("Failed to create photo from image data")
+                return
 
             # Destroy previous preview if it exists
             if hasattr(self, "hover_preview") and self.hover_preview:
-                for widget in self.hover_preview.winfo_children():
-                    widget.destroy()
                 self.hover_preview.destroy()
                 self.hover_preview = None
 
+            # Create preview window
             self.hover_preview = tk.Toplevel(self.root)
             self.hover_preview.wm_overrideredirect(True)
             self.hover_preview.geometry(f"+{event.x_root+20}+{event.y_root+10}")
 
+            # Display the image
             img_label = tk.Label(self.hover_preview, image=photo)
-            img_label.image = photo  # Keep reference
+            img_label.image = photo  # Keep reference to prevent garbage collection
             img_label.pack()
 
         except Exception as e:
-            print("Image preview error:", e)
+            print(f"Image preview error: {e}")
 
     def _hide_preview(self, event):
         if hasattr(self, "hover_preview") and self.hover_preview:
