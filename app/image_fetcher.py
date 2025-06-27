@@ -57,10 +57,17 @@ class CardImageFetcher:
         card_type = card.get("Type", "").lower()
         
         try:
-            # Check if card is horizontal
-            if not is_front_image or card_type in ["leader", "base"]:
+            # For back images, we need to check if it's horizontal
+            if not is_front_image:
+                # Most back sides are vertical (375x525)
+                return image_data.resize((375, 525), Image.Resampling.LANCZOS)
+            
+            # For front images, check card type
+            if card_type in ["leader", "base"]:
+                # Horizontal cards (525x375)
                 return image_data.resize((525, 375), Image.Resampling.LANCZOS)
             else:
+                # Vertical cards (375x525)
                 return image_data.resize((375, 525), Image.Resampling.LANCZOS)
         except Exception as e:
             print(f"Error resizing image: {e}")

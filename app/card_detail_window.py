@@ -120,7 +120,32 @@ class CardDetailWindow:
 
     def flip_image(self):
         self.is_front_image = not self.is_front_image
-        self.add_image_section(self.scrollable_frame)  # Reload the image section
+        
+        try:
+            print(f"Flipping card to {'front' if self.is_front_image else 'back'} side")
+            
+            # Load new image
+            image_data, image_path = CardImageFetcher.load_card_image(self.card, self.is_front_image)
+            self.image_path = image_path
+            
+            if image_data:
+                # Resize the image based on card type
+                resized_image = CardImageFetcher.resize_card_image(image_data, self.card, self.is_front_image)
+                
+                # Convert to Tkinter PhotoImage
+                photo = CardImageFetcher.create_tk_photo(resized_image)
+                
+                if photo:
+                    self.image_label.configure(image=photo)
+                    self.image_label.image = photo  # Keep reference to prevent garbage collection
+                else:
+                    self.image_label.configure(text="Error processing image")
+            else:
+                self.image_label.configure(text=f"Image not found\n{self.card.get('Name')}\n{image_path}")
+                print(f"Image not found at {image_path}")
+        except Exception as e:
+            self.image_label.configure(text=f"Error loading image: {str(e)}")
+            print(f"Error in flip_image: {e}")
 
     def open_full_art(self):
         try:
