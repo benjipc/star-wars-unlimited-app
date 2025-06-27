@@ -4,6 +4,7 @@ from PIL import Image, ImageTk
 import os
 import json
 from app.config import CONFIG
+from app.image_fetcher import CardImageFetcher
 from typing import Dict, Any
 
 class CardDetailWindow:
@@ -78,26 +79,32 @@ class CardDetailWindow:
         self.image_label = tk.Label(image_frame)
         self.image_label.pack(anchor="center")
 
-        card_key = self.card.get("card_key", "")
-        suffix = "back" if not self.is_front_image else "front"
-        image_path = os.path.join(CONFIG["data"]["image_folder"], f"{card_key}_{suffix}.jpg")
-        
+        # Use image fetcher to load card image
         try:
-            image_data = Image.open(image_path)
+            print(f"Loading image for card: {self.card.get('Name')} ({self.card.get('card_key')})")
+            print(f"Using front image: {self.is_front_image}")
+            
+            image_data, image_path = CardImageFetcher.load_card_image(self.card, self.is_front_image)
             self.image_path = image_path
             
-            card_type = self.card.get("Type", "").lower()
-            if not self.is_front_image or card_type not in ["leader", "base"]:
-                image_data = image_data.resize((375, 525), Image.Resampling.LANCZOS)
-            else:
-                image_data = image_data.resize((525, 375), Image.Resampling.LANCZOS)
+            if image_data:
+                # Resize the image based on card type
+                resized_image = CardImageFetcher.resize_card_image(image_data, self.card, self.is_front_image)
                 
-            photo = ImageTk.PhotoImage(image_data)
-            self.image_label.configure(image=photo)
-            self.image_label.image = photo  # Keep reference to prevent garbage collection
-        except (FileNotFoundError, IOError):
-            print(f"Image not found: {image_path}")
-            self.image_label.configure(text="Image not found")
+                # Convert to Tkinter PhotoImage
+                photo = CardImageFetcher.create_tk_photo(resized_image)
+                
+                if photo:
+                    self.image_label.configure(image=photo)
+                    self.image_label.image = photo  # Keep reference to prevent garbage collection
+                else:
+                    self.image_label.configure(text="Error processing image")
+            else:
+                self.image_label.configure(text=f"Image not found\n{self.card.get('Name')}\n{image_path}")
+                print(f"Image not found at {image_path}")
+        except Exception as e:
+            self.image_label.configure(text=f"Error loading image: {str(e)}")
+            print(f"Error in add_image_section: {e}")
 
         button_frame = tk.Frame(parent)
         button_frame.pack(pady=2)
@@ -120,9 +127,8 @@ class CardDetailWindow:
             art_window = tk.Toplevel(self.parent)
             art_window.title("Full Art View")
 
-            card_key = self.card.get("card_key", "")
-            suffix = "back" if not self.is_front_image else "front"
-            image_path = os.path.join(CONFIG["data"]["image_folder"], f"{card_key}_{suffix}.jpg")
+            # Use image fetcher to get the path
+            image_path = CardImageFetcher.get_card_image_path(self.card, self.is_front_image)
             
             try:
                 full_img = Image.open(image_path)
